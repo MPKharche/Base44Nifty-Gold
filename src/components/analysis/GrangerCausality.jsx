@@ -42,7 +42,7 @@ export default function GrangerCausality({ niftyData, goldData }) {
         returns: item.returns
       }));
       
-      // Use LLM to analyze Granger causality
+      // Use local analysis for Granger causality
       const response = await InvokeLLM({
         prompt: `Analyze the following time series data for Nifty and Gold returns to test for Granger causality. 
 Determine if changes in Nifty returns cause changes in Gold returns, or vice versa.
@@ -59,6 +59,11 @@ Respond with a JSON object containing the following fields:
 3. interpretation: text explaining the results
 4. tradingImplications: text explaining how traders can use this information
 5. robustness: assessment of how robust/reliable these results are given the data`,
+        context: {
+          niftyData: filteredNifty,
+          goldData: filteredGold,
+          lag: Math.min(5, Math.floor(days / 20))
+        },
         response_json_schema: {
           type: "object",
           properties: {
@@ -85,7 +90,7 @@ Respond with a JSON object containing the following fields:
         }
       });
       
-      setResults(response);
+      setResults(response.output || response);
     } catch (err) {
       console.error("Error analyzing Granger causality:", err);
       setError("Failed to analyze the causal relationship. Please try again later.");

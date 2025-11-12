@@ -1,11 +1,10 @@
-import { base44 } from './base44Client';
+// Local storage implementations
+import { MarketData, Signal } from './localStorage';
 
+// User auth - placeholder for future implementation
+export const User = {
+  // Placeholder for user authentication
+  // Can be extended with local auth if needed
+};
 
-export const MarketData = base44.entities.MarketData;
-
-export const Signal = base44.entities.Signal;
-
-
-
-// auth sdk:
-export const User = base44.auth;
+export { MarketData, Signal };

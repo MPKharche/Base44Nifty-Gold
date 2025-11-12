@@ -220,6 +220,14 @@ Provide optimization recommendations including:
 3. Risk analysis
 4. Market regime considerations
 5. Rebalancing strategy`,
+        context: {
+          portfolioWeights,
+          niftyData,
+          goldData,
+          timeframe,
+          portfolioMetrics,
+          signals
+        },
         response_json_schema: {
           type: "object",
           properties: {
@@ -248,14 +256,20 @@ Provide optimization recommendations including:
         }
       });
 
+      const aiResponse = response.output || response;
+      const weightAdjustments = aiResponse.weightAdjustments || {
+        nifty: (aiResponse.suggestedAllocation?.nifty || portfolioWeights.nifty) - portfolioWeights.nifty,
+        gold: (aiResponse.suggestedAllocation?.gold || portfolioWeights.gold) - portfolioWeights.gold
+      };
+
       const simulationResults = generateMonteCarloSimulation(
         historicalData,
-        response.weightAdjustments,
+        weightAdjustments,
         numSimulations
       );
 
       setSimulationResult({
-        aiRecommendations: response,
+        aiRecommendations: aiResponse,
         monteCarlo: simulationResults
       });
     } catch (err) {

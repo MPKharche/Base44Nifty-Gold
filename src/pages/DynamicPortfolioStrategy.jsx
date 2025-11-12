@@ -672,6 +672,11 @@ Provide comprehensive analysis including:
 4. The most profitable rebalancing themes
 5. Strategy effectiveness in different market conditions
 6. Recommendation for future allocation based on current conditions`,
+        context: {
+          portfolioHistory,
+          niftyData,
+          goldData
+        },
         response_json_schema: {
           type: "object",
           properties: {
@@ -716,7 +721,7 @@ Provide comprehensive analysis including:
         }
       });
       
-      setSimulationResult(response);
+      setSimulationResult(response.output || response);
     } catch (err) {
       console.error("Error running AI analysis:", err);
       setError("Failed to run AI analysis. Please try again later.");

@@ -100,7 +100,7 @@ export default function AdvancedInsights() {
       // Get recent signals
       const recentSignals = signals.slice(0, 5);
       
-      // Use LLM to perform advanced analysis
+      // Use local analysis for advanced insights
       const response = await InvokeLLM({
         prompt: `Analyze the relationship between Nifty and Gold markets based on the provided data. 
 Identify any meaningful patterns or regimes in their relationship.
@@ -117,6 +117,11 @@ Respond with a comprehensive analysis including:
 4. Specific trading strategies for the current conditions
 5. Risk management considerations
 6. Outlook for the coming week`,
+        context: {
+          niftyData: filteredNifty,
+          goldData: filteredGold,
+          signals: recentSignals
+        },
         response_json_schema: {
           type: "object",
           properties: {
@@ -138,7 +143,7 @@ Respond with a comprehensive analysis including:
         }
       });
       
-      setAnalysisResult(response);
+      setAnalysisResult(response.output || response);
     } catch (err) {
       console.error("Error performing advanced analysis:", err);
       setError("Failed to perform advanced analysis. Please try again later.");

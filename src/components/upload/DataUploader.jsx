@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Upload, AlertCircle, Check, FileText, Loader2 } from "lucide-react";
 import { MarketData } from "@/api/entities";
-import { UploadFile, ExtractDataFromUploadedFile } from "@/api/integrations";
+import { parseCSVFile } from "@/api/csvParser";
 import { Progress } from "@/components/ui/progress";
 
 export default function DataUploader({ onUploadComplete }) {
@@ -33,34 +33,10 @@ export default function DataUploader({ onUploadComplete }) {
     setError("");
   };
 
-  const parseCSV = async (fileUrl) => {
+  const parseCSV = async (file) => {
     try {
-      const schema = {
-        type: "object",
-        properties: {
-          time: { type: "string" },
-          open: { type: "number" },
-          high: { type: "number" },
-          low: { type: "number" },
-          close: { type: "number" },
-          Volume: { type: "number" },
-          Plot: { type: "number" },
-          MACD: { type: "number" },
-          "Signal Line": { type: "number" },
-          Histogram: { type: "number" },
-          "Cross %K": { type: "number" },
-          "%D": { type: "number" },
-          "%K": { type: "number" }
-        },
-        required: ["time", "open", "high", "low", "close", "Volume"]
-      };
-
-      const result = await ExtractDataFromUploadedFile({
-        file_url: fileUrl,
-        json_schema: schema
-      });
-
-      return result.output;
+      const result = await parseCSVFile(file);
+      return result;
     } catch (err) {
       console.error("CSV parsing error:", err);
       throw new Error(`Failed to parse CSV file: ${err.message}`);
@@ -68,35 +44,70 @@ export default function DataUploader({ onUploadComplete }) {
   };
 
   const processData = (rawData, assetType) => {
+    // Find the date column (could be 'time', 'date', 'Date', etc.)
+    const dateColumn = rawData[0] ? 
+      Object.keys(rawData[0]).find(key => 
+        ['time', 'date', 'Date', 'TIME', 'DATE'].includes(key)
+      ) : null;
+    
+    if (!dateColumn) {
+      throw new Error('Could not find date column in CSV. Expected column names: time, date, Date');
+    }
+
     return rawData.map((row, index, array) => {
       // Convert all numeric fields
-      const numericFields = ['open', 'high', 'low', 'close', 'Volume'];
+      const numericFields = ['open', 'high', 'low', 'close', 'Close', 'Open', 'High', 'Low', 'Volume', 'volume'];
       const processedRow = {};
 
       numericFields.forEach(field => {
-        const value = parseFloat(String(row[field]).replace(/[^\d.-]/g, ''));
-        processedRow[field] = isNaN(value) ? null : value;
+        if (row[field] !== undefined) {
+          const value = typeof row[field] === 'number' ? row[field] : parseFloat(String(row[field]).replace(/[^\d.-]/g, ''));
+          // Use lowercase field names
+          const lowerField = field.toLowerCase();
+          processedRow[lowerField] = isNaN(value) ? null : value;
+        }
       });
 
       // Calculate returns if possible
-      if (index > 0) {
-        const prevClose = parseFloat(String(array[index - 1].close).replace(/[^\d.-]/g, ''));
-        const currClose = processedRow.close;
-        if (!isNaN(prevClose) && !isNaN(currClose) && prevClose !== 0) {
-          processedRow.returns = ((currClose - prevClose) / prevClose) * 100;
+      if (index > 0 && processedRow.close !== null) {
+        const prevRow = array[index - 1];
+        const prevClose = typeof prevRow.close === 'number' ? prevRow.close : 
+          typeof prevRow.Close === 'number' ? prevRow.Close :
+          parseFloat(String(prevRow.close || prevRow.Close || 0).replace(/[^\d.-]/g, ''));
+        
+        if (!isNaN(prevClose) && prevClose !== 0 && processedRow.close !== null) {
+          processedRow.returns = ((processedRow.close - prevClose) / prevClose) * 100;
         }
       }
 
+      // Format date - handle various formats
+      let dateValue = row[dateColumn];
+      if (typeof dateValue === 'string') {
+        // Try to parse date string
+        const date = new Date(dateValue);
+        if (!isNaN(date.getTime())) {
+          dateValue = date.toISOString().split('T')[0];
+        }
+      } else if (dateValue instanceof Date) {
+        dateValue = dateValue.toISOString().split('T')[0];
+      }
+
       return {
-        date: row.time,
+        date: dateValue,
         asset_type: assetType,
-        ...processedRow
+        open: processedRow.open,
+        high: processedRow.high,
+        low: processedRow.low,
+        close: processedRow.close,
+        volume: processedRow.volume || null,
+        returns: processedRow.returns || null
       };
     }).filter(row => 
       row.open !== null && 
       row.high !== null && 
       row.low !== null && 
-      row.close !== null
+      row.close !== null &&
+      row.date
     );
   };
 
@@ -115,8 +126,7 @@ export default function DataUploader({ onUploadComplete }) {
       let niftyData = [];
       if (niftyFile) {
         setProgress(10);
-        const { file_url } = await UploadFile({ file: niftyFile });
-        const rawNiftyData = await parseCSV(file_url);
+        const rawNiftyData = await parseCSV(niftyFile);
         niftyData = processData(rawNiftyData, 'nifty');
         setProgress(30);
       }
@@ -125,8 +135,7 @@ export default function DataUploader({ onUploadComplete }) {
       let goldData = [];
       if (goldFile) {
         setProgress(40);
-        const { file_url } = await UploadFile({ file: goldFile });
-        const rawGoldData = await parseCSV(file_url);
+        const rawGoldData = await parseCSV(goldFile);
         goldData = processData(rawGoldData, 'gold');
         setProgress(60);
       }
